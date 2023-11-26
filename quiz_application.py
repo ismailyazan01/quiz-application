@@ -1,65 +1,65 @@
+from collections import deque
+
 class Question:
     def __init__(self, question, answer):
-        """
-        Represents a single question in the quiz.
-
-        Parameters:
-        - question (str): The text of the question.
-        - answer (str): The correct answer to the question.
-        """
         self.question = question
         self.answer = answer
 
-
 class Quiz:
     def __init__(self, questions=None):
-        """
-        Represents a quiz containing a collection of questions.
-
-        Parameters:
-        - questions (dict): A dictionary of questions where the keys are question numbers and the values are Question objects.
-        """
-        self.questions = questions or {}
+        self.questions = deque(questions) if questions else deque()
         self.count = 1
 
     def add_question(self):
-        """
-        Allows the user to add questions to the quiz interactively.
-        """
         self.count = len(self.questions) + 1
         while True:
-            question = input("Enter a question to add to the quiz (Enter \"done\" if done): ")
-            if question.lower() == "done":
+            question_text = input("Enter a question to add to the quiz (Enter \"done\" if done): ")
+            if question_text.lower() == "done":
                 break
             answer = input("Enter the answer to the question: ")
-            self.questions[self.count] = [question, answer]
+            question = Question(f"({self.count}.) {question_text}", answer)
+            self.questions.append(question)
             self.count += 1
 
-    def delete_question(self):
+    def delete_question(self, question_num=None):
         """
-        Allows the user to delete a question from the quiz based on the question number.
-        """
-        question_num = input("Enter the question number of the question you'd like to delete from the quiz: ")
+        Deletes a question from the quiz based on the question number.
 
-        try:
-            del self.questions[int(question_num)]
-        except KeyError:
+        Parameters:
+        - question_num (int): The question number to delete.
+        """
+        if not self.questions:
+            print("No questions available for deletion.")
+            return
+
+        if question_num is None:
+            try:
+                question_num = int(input("Enter the question number you'd like to delete: "))
+            except ValueError:
+                print("Invalid input. Please enter a valid question number.")
+                return
+
+        if 1 <= question_num <= len(self.questions):
+            deleted_question = self.questions[question_num - 1]
+            self.questions.remove(deleted_question)
+            print(f"Question {question_num} deleted successfully.")
+        else:
             print("Invalid question number. Please enter a valid question number.")
             return
-        self.count = max(self.questions.keys(), default=0)
 
-        print("Question deleted successfully.")
+        # Update question numbers
+        for i, question in enumerate(self.questions, start=1):
+            question.question = f"({i}.) {question.question.split(' ', 1)[1]}"
+
+        self.count = len(self.questions) + 1
 
     def view_questions(self):
-        """
-        Displays the existing questions in the quiz.
-        """
         if not self.questions:
             print("No questions available.")
         else:
             print("Existing Questions:")
-            for i in self.questions:
-                print(f"({i}.) {self.questions[i][0]}")
+            for question in self.questions:
+                print(question.question)
 
     def get_results(self, correct_num, question_num):
         """
@@ -80,10 +80,10 @@ class Quiz:
         """
         correct_num = 0
         num_of_questions = 0
-        for i in self.questions:
-            print(f"({i}.) {self.questions[i][0]}")
+        for i, question in enumerate(self.questions, start=1):
+            print(question.question)
             user_answer = input("Enter answer: ")
-            if user_answer.lower() == self.questions.get(i)[1].lower():
+            if user_answer.lower() == question.answer.lower():
                 correct_num += 1
             num_of_questions += 1
         score = self.get_results(correct_num, num_of_questions)
@@ -111,7 +111,10 @@ class Quiz:
             if menu_choice == 1:
                 self.add_question()
             elif menu_choice == 2:
-                self.delete_question()
+                if not self.questions:
+                    print("Error: Cannot delete questions without any questions. Please add questions first.")
+                else:
+                    self.delete_question()
                 continue
             elif menu_choice == 3:
                 self.view_questions()
