@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Question:
-    def __init__(self, question, answer):
+    def __init__(self, question_id, question, answer):
+        self.question_id = question_id
         self.question = question
         self.answer = answer
 
@@ -27,7 +28,7 @@ class Quiz:
     def fetch_questions(self):
         self.cursor.execute("SELECT * FROM questions")
         rows = self.cursor.fetchall()
-        questions = [Question(f"({row[0]}) {row[1]}", row[2]) for row in rows]
+        questions = [Question(row[0], row[1], row[2]) for row in rows]
         return deque(questions)
 
     def add_question(self, question_text, answer):
@@ -35,6 +36,7 @@ class Quiz:
         data = (question_text, answer)
         self.cursor.execute(insert_query, data)
         self.db_connection.commit()
+        self.update_ids_and_reset_counter()
         self.questions = self.fetch_questions()
         self.count = len(self.questions) + 1
 
@@ -44,6 +46,10 @@ class Quiz:
             question_num = int(input("Enter the question number you'd like to delete: "))
             if 1 <= question_num <= len(self.questions):
                 self.delete_question_from_db(question_num)
+                self.update_ids_and_reset_counter()
+                self.questions = self.fetch_questions()
+                self.count = len(self.questions) + 1
+                print(f"Question {question_num} deleted successfully.")
             else:
                 print("Invalid question number. Please enter a valid question number.")
         except ValueError:
@@ -54,17 +60,30 @@ class Quiz:
         data = (question_num,)
         self.cursor.execute(delete_query, data)
         self.db_connection.commit()
-        self.questions = self.fetch_questions()
-        self.count = len(self.questions) + 1
-        print(f"Question {question_num} deleted successfully.")
+
+    def update_ids_and_reset_counter(self):
+        self.reset_auto_increment_counter()
+        self.update_existing_ids()
+
+    def reset_auto_increment_counter(self):
+        self.cursor.execute("ALTER TABLE questions AUTO_INCREMENT = 1;")
+        self.db_connection.commit()
+
+    def update_existing_ids(self):
+        set_new_id_query = "SET @new_id := 0;"
+        update_id_query = "UPDATE questions SET id = @new_id := @new_id + 1;"
+        self.cursor.execute(set_new_id_query)
+        self.cursor.execute(update_id_query)
+        self.db_connection.commit()
 
     def view_questions(self):
         if not self.questions:
             print("No questions available.")
         else:
             print("Existing Questions:")
-            for question in self.questions:
-                print(question.question)
+            for index, question in enumerate(self.questions, start=1):
+                print(f"({index}.) {question.question}")
+            print("-" * 35)
 
     def get_results(self, correct_num, question_num):
         return (correct_num / question_num) * 100
@@ -89,17 +108,17 @@ class Quiz:
     def run_quiz(self):
         while True:
             try:
-                menu_choice = int(input("Would you like to add more questions (Enter 1), delete questions (Enter 2), "
-                                        "view questions (Enter 3), start the quiz (Enter 4), or quit the application "
-                                        "(Enter 5)? "))
+                menu_choice = int(input("1. Add a question\n"
+                                        "2. Delete a question\n"
+                                        "3. View questions\n"
+                                        "4. Take a quiz\n"
+                                        "5. Exit\n"))
             except ValueError:
                 print("Invalid input. Please enter a number.")
                 continue
 
             if menu_choice == 1:
-                question_text = input("Enter a question to add to the quiz (Enter \"done\" if done): ")
-                if question_text.lower() == "done":
-                    break
+                question_text = input("Enter a question to add to the quiz: ")
                 answer = input("Enter the answer to the question: ")
                 self.add_question(question_text, answer)
             elif menu_choice == 2:
