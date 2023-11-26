@@ -1,4 +1,9 @@
+import mysql.connector
 from collections import deque
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Question:
     def __init__(self, question, answer):
@@ -6,52 +11,52 @@ class Question:
         self.answer = answer
 
 class Quiz:
-    def __init__(self, questions=None):
-        self.questions = deque(questions) if questions else deque()
-        self.count = 1
+    def __init__(self):
+        self.db_connection = mysql.connector.connect(
+            host=os.getenv("DB_HOST"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            database="quiz_db"
+        )
 
-    def add_question(self):
+        self.cursor = self.db_connection.cursor()
+
+        self.questions = self.fetch_questions()
         self.count = len(self.questions) + 1
-        while True:
-            question_text = input("Enter a question to add to the quiz (Enter \"done\" if done): ")
-            if question_text.lower() == "done":
-                break
-            answer = input("Enter the answer to the question: ")
-            question = Question(f"({self.count}.) {question_text}", answer)
-            self.questions.append(question)
-            self.count += 1
 
-    def delete_question(self, question_num=None):
-        """
-        Deletes a question from the quiz based on the question number.
+    def fetch_questions(self):
+        self.cursor.execute("SELECT * FROM questions")
+        rows = self.cursor.fetchall()
+        questions = [Question(f"({row[0]}) {row[1]}", row[2]) for row in rows]
+        return deque(questions)
 
-        Parameters:
-        - question_num (int): The question number to delete.
-        """
-        if not self.questions:
-            print("No questions available for deletion.")
-            return
-
-        if question_num is None:
-            try:
-                question_num = int(input("Enter the question number you'd like to delete: "))
-            except ValueError:
-                print("Invalid input. Please enter a valid question number.")
-                return
-
-        if 1 <= question_num <= len(self.questions):
-            deleted_question = self.questions[question_num - 1]
-            self.questions.remove(deleted_question)
-            print(f"Question {question_num} deleted successfully.")
-        else:
-            print("Invalid question number. Please enter a valid question number.")
-            return
-
-        # Update question numbers
-        for i, question in enumerate(self.questions, start=1):
-            question.question = f"({i}.) {question.question.split(' ', 1)[1]}"
-
+    def add_question(self, question_text, answer):
+        insert_query = "INSERT INTO questions (question_text, answer) VALUES (%s, %s)"
+        data = (question_text, answer)
+        self.cursor.execute(insert_query, data)
+        self.db_connection.commit()
+        self.questions = self.fetch_questions()
         self.count = len(self.questions) + 1
+
+    def delete_question(self):
+        self.view_questions()
+        try:
+            question_num = int(input("Enter the question number you'd like to delete: "))
+            if 1 <= question_num <= len(self.questions):
+                self.delete_question_from_db(question_num)
+            else:
+                print("Invalid question number. Please enter a valid question number.")
+        except ValueError:
+            print("Invalid input. Please enter a valid question number.")
+
+    def delete_question_from_db(self, question_num):
+        delete_query = "DELETE FROM questions WHERE id = %s"
+        data = (question_num,)
+        self.cursor.execute(delete_query, data)
+        self.db_connection.commit()
+        self.questions = self.fetch_questions()
+        self.count = len(self.questions) + 1
+        print(f"Question {question_num} deleted successfully.")
 
     def view_questions(self):
         if not self.questions:
@@ -62,22 +67,9 @@ class Quiz:
                 print(question.question)
 
     def get_results(self, correct_num, question_num):
-        """
-        Calculates the percentage of correct answers.
-
-        Parameters:
-        - correct_num (int): Number of correctly answered questions.
-        - question_num (int): Total number of questions.
-
-        Returns:
-        - float: Percentage of correct answers.
-        """
         return (correct_num / question_num) * 100
 
     def quiz_session(self):
-        """
-        Conducts the quiz session, allowing the user to answer questions and displays the results.
-        """
         correct_num = 0
         num_of_questions = 0
         for i, question in enumerate(self.questions, start=1):
@@ -95,10 +87,6 @@ class Quiz:
             print("You can do better next time!")
 
     def run_quiz(self):
-        """
-        Initiates the quiz, allowing the user to add questions, delete questions, view questions, start the quiz, or
-        quit the application.
-        """
         while True:
             try:
                 menu_choice = int(input("Would you like to add more questions (Enter 1), delete questions (Enter 2), "
@@ -109,7 +97,11 @@ class Quiz:
                 continue
 
             if menu_choice == 1:
-                self.add_question()
+                question_text = input("Enter a question to add to the quiz (Enter \"done\" if done): ")
+                if question_text.lower() == "done":
+                    break
+                answer = input("Enter the answer to the question: ")
+                self.add_question(question_text, answer)
             elif menu_choice == 2:
                 if not self.questions:
                     print("Error: Cannot delete questions without any questions. Please add questions first.")
@@ -129,6 +121,15 @@ class Quiz:
             else:
                 print("Invalid Input")
 
+    def close_connection(self):
+        self.db_connection.close()
 
+
+# Instantiate the Quiz class
 quiz_instance = Quiz()
+
+# Run the quiz
 quiz_instance.run_quiz()
+
+# Close the database connection when done
+quiz_instance.close_connection()
