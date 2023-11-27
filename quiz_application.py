@@ -105,6 +105,18 @@ class Quiz:
         else:
             print("You can do better next time!")
 
+    def clear_all_questions(self):
+        confirmation = input("Are you sure you want to clear all questions? (yes/no): ").lower()
+        if confirmation == "yes":
+            self.cursor.execute("TRUNCATE TABLE questions;")
+            self.db_connection.commit()
+            print("All questions cleared successfully.")
+            self.update_ids_and_reset_counter()
+            self.questions = self.fetch_questions()
+            self.count = len(self.questions) + 1
+        else:
+            print("Operation canceled.")
+
     def run_quiz(self):
         while True:
             try:
@@ -112,7 +124,8 @@ class Quiz:
                                         "2. Delete a question\n"
                                         "3. View questions\n"
                                         "4. Take a quiz\n"
-                                        "5. Exit\n"))
+                                        "5. Clear all questions\n"
+                                        "6. Exit\n"))
             except ValueError:
                 print("Invalid input. Please enter a number.")
                 continue
@@ -136,6 +149,8 @@ class Quiz:
                     self.quiz_session()
                     break
             elif menu_choice == 5:
+                self.clear_all_questions()
+            elif menu_choice == 6:
                 exit()
             else:
                 print("Invalid Input")
